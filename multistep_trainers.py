@@ -29,7 +29,7 @@ class MutiStep_Second_Level_Trainer:
         if store_video:
             video_filename = (
                 video_folder
-                + env.spec.id+str(agents[-1].get_id())
+                + 'CARLLunarLander'+str(agents[-1].get_id())
                 + '.mp4'
             )
             fourcc = cv2.VideoWriter_fourcc(*'avc1')#*'avc1'
@@ -150,11 +150,11 @@ class MutiStep_Second_Level_Trainer:
 
             # Save model
             if save_model and ((episode + 1) % save_model_each == 0):
-                agents[-1].save(MODEL_PATH + env.spec.id + '/')
+                agents[-1].save(MODEL_PATH + '/')
                         
             if train and (episode_return > best_return):
                 best_return = episode_return
-                agents[-1].save(MODEL_PATH + env.spec.id + '/', best=True)
+                agents[-1].save(MODEL_PATH + '/', best=True)
             
             # Eval agent
             if train and ((episode+1) % eval_each == 0):

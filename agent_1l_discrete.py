@@ -30,15 +30,18 @@ def create_second_level_agent(
         parallel, lr, lr_alpha, lr_actor, int_heads
     )
 
-    if use_pixels:
-        rnd_input_shape = (1, input_channels, height, width)
+    if int_heads:
+        if use_pixels:
+            rnd_input_shape = (1, input_channels, height, width)
+        else:
+            rnd_input_shape = (1, feature_dim)        
+        
+        rnd_module = RND_Module(
+                input_shape=rnd_input_shape,
+                out_dim=rnd_out_dim
+            ).to(device)
     else:
-        rnd_input_shape=(1, feature_dim)        
-    
-    rnd_module = RND_Module(
-            input_shape=rnd_input_shape,
-            out_dim=rnd_out_dim
-        ).to(device)
+        rnd_module = None
 
     second_level_agent = Second_Level_Agent(
         n_actions, second_level_architecture, 

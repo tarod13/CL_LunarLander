@@ -57,14 +57,26 @@ class RewardForwardFilter(object):
 class RND_Net(nn.Module):
     def __init__(self, input_shape=(1,1,42,158), latent_dim=128, out_dim=512, lr=1e-4):
         super().__init__()  
-        self.vision_net = vision_Net(
-            latent_dim=latent_dim, 
-            input_channels=input_shape[1], 
-            height=input_shape[2], 
-            width=input_shape[3],
-            noisy=False)
+        if len(input_shape) == 2:
+            input_shape_ = (1,1,42,158)
+            self.use_pixels = False
+            l_dim = 1
+        else:
+            input_shape_ = input_shape
+            self.use_pixels = True
+            l_dim = latent_dim
+
+        # TODO
+        # self.vision_net = vision_Net(
+        #     latent_dim=l_dim, 
+        #     input_channels=input_shape_[1], 
+        #     height=input_shape_[2], 
+        #     width=input_shape_[3],
+        #     noisy=False
+        # )
+
         self.linear_pipe = nn.Sequential(
-            nn.Linear(latent_dim, latent_dim),
+            nn.Linear(input_shape[1], latent_dim),
             nn.ReLU(),
             nn.Linear(latent_dim, out_dim)  
         )    
@@ -72,8 +84,11 @@ class RND_Net(nn.Module):
         self.apply(weights_init_rnd)
         self.optimizer = Adam(self.parameters(), lr=lr)
    
-    def forward(self, pixels):
-        features = self.vision_net(pixels)
+    def forward(self, obs):
+        if self.use_pixels:
+            features = self.vision_net(obs)
+        else:
+            features = obs
         return self.linear_pipe(features)
 
 
@@ -87,7 +102,7 @@ class RND_targetNet(RND_Net):
 
 class RND_Module(nn.Module):
     def __init__(
-        self, input_shape=(1,1,42,158), latent_dim=1024, out_dim=128, lr=1e-4, 
+        self, input_shape=(1,1,42,158), latent_dim=128, out_dim=128, lr=1e-4, 
         obs_norm_step=50, int_gamma=0.99
         ):
 

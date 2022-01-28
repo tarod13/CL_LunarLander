@@ -24,31 +24,31 @@ DEFAULT_ENV_NAME = (
     +f'Gy:{DEFAULT_GRAVITY_Y}'
 )
 DEFAULT_N_STEPS_IN_SECOND_LEVEL_EPISODE = 1000
-DEFAULT_BUFFER_SIZE = 3000
-DEFAULT_N_EPISODES = 10000
+DEFAULT_BUFFER_SIZE = 5000
+DEFAULT_N_EPISODES = 20000
 DEFAULT_ID = '2001-01-15_19-10-56'
 DEFAULT_CLIP_Q_ERROR = False
 DEFAULT_CLIP_VALUE_Q_ERROR = 5.0
 DEFAULT_CLIP_VALUE = 1.0
 DEFAULT_DISCOUNT_FACTOR = 0.999
 DEFAULT_DISCOUNT_FACTOR_INT = 0.99
-DEFAULT_BATCH_SIZE = 128
+DEFAULT_BATCH_SIZE = 64
 DEFAULT_MIN_EPSILON = 0.2
-DEFAULT_INIT_EPSILON = 1.0
-DEFAULT_DELTA_EPSILON = 5e-6
+DEFAULT_INIT_EPSILON = 0.5
+DEFAULT_DELTA_EPSILON = 1e-4
 DEFAULT_ENTROPY_FACTOR = 0.1
 DEFAULT_ENTROPY_UPDATE_RATE = 0.005
 DEFAULT_WEIGHT_Q_LOSS = 0.5
-DEFAULT_INIT_LOG_ALPHA = -6.9
-DEFAULT_LEARN_ALPHA = False
-DEFAULT_LR = 3e-4 # wrong value: 3e-5
-DEFAULT_LR_ACTOR = 3e-4 # wrong value: 3e-5
-DEFAULT_LR_ALPHA = 3e-4 # wrong value: 1e-6
+DEFAULT_INIT_LOG_ALPHA = 0.0
+DEFAULT_LEARN_ALPHA = True
+DEFAULT_LR = 1e-3
+DEFAULT_LR_ACTOR = 1e-3 
+DEFAULT_LR_ALPHA = 1e-3 
 DEFAULT_ALPHA_V_WEIGHT = 0
-DEFAULT_INITIALIZE_SAC = True
-DEFAULT_INITIALIZE_RND = True
-DEFAULT_INITIALIZATION_STEPS_SAC = 700
-DEFAULT_INITIALIZATION_STEPS_RND = 700
+DEFAULT_INITIALIZE_SAC = False
+DEFAULT_INITIALIZE_RND = False
+DEFAULT_INITIALIZATION_STEPS_SAC = 20000
+DEFAULT_INITIALIZATION_STEPS_RND = 20000
 DEFAULT_NOISY_ACTOR_CRITIC = False
 DEFAULT_SAVE_STEP_EACH = 1
 DEFAULT_TRAIN_EACH = 64
@@ -66,7 +66,7 @@ DEFAULT_TARGET_UPDATE_RATE = 1e-3
 DEFAULT_STATE_DEPENDENT_TEMPERATURE = False
 DEFAULT_ACTOR_LOSS = 'jeffreys'
 DEFAULT_C_MINUS_TEMP_SEARCH = 1e-6
-DEFAULT_RND_OUT_DIM = 512
+DEFAULT_RND_OUT_DIM = 64
 DEFAULT_LOG_NOVELTY_MIN = -10
 DEFAULT_LOG_NOVELTY_MAX = -6
 DEFAULT_EVAL_GREEDY = True
@@ -80,8 +80,8 @@ if __name__ == "__main__":
     parser.add_argument("--cpu", action="store_true", help="Disable cuda")
     parser.add_argument("--render", action="store_true", help="Display agent-env interaction")
     parser.add_argument("--eval", action="store_true", help="Train (False) or evaluate (True) the agent")
-    parser.add_argument("--gx", default=DEFAULT_GRAVITY_X, help="Gravity in x-asis, default=" + DEFAULT_GRAVITY_X)
-    parser.add_argument("--gy", default=DEFAULT_GRAVITY_Y, help="Gravity in y-asis, default=" + DEFAULT_GRAVITY_Y)
+    parser.add_argument("--gx", default=DEFAULT_GRAVITY_X, help=f"Gravity in x-asis, default={DEFAULT_GRAVITY_X}")
+    parser.add_argument("--gy", default=DEFAULT_GRAVITY_Y, help=f"Gravity in y-asis, default={DEFAULT_GRAVITY_Y}")
     parser.add_argument("--env_name", default=DEFAULT_ENV_NAME, help="Name of the environment, default=" + DEFAULT_ENV_NAME)
     parser.add_argument("--n_steps_in_second_level_episode", default=DEFAULT_N_STEPS_IN_SECOND_LEVEL_EPISODE, help="Number of second decision" +
         "level steps taken in each episode, default=" + str(DEFAULT_N_STEPS_IN_SECOND_LEVEL_EPISODE))
@@ -227,7 +227,7 @@ if __name__ == "__main__":
         env, agents, database, n_episodes=n_episodes, render=args.render, 
         max_episode_steps=args.n_steps_in_second_level_episode, 
         store_video=store_video, wandb_project=wandb_project, 
-        MODEL_PATH=MODEL_PATH, train=(not args.eval),
+        MODEL_PATH=MODEL_PATH+args.env_name, train=(not args.eval),
         save_step_each=args.save_step_each, train_each=args.train_each, 
         n_step_td=args.n_step_td, greedy_sampling=args.eval_greedy,
         init_sac=args.init_sac, init_rnd=args.init_rnd, 

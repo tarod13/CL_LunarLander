@@ -94,12 +94,16 @@ class MultiStep_Second_Level_SAC_PolicyOptimizer(Optimizer):
         n_actions = agent._n_actions
 
         # Calculate RND loss and novelty
-        log_novelty, int_rewards = agent.calc_novelty(
-            states[:,1:,:,:,:].reshape(-1, *states.shape[-n_dims:]) 
-            if self.use_pixels else 
-            states[:,1:,:].reshape(-1, *states.shape[-n_dims:])
-        )
-        int_rewards = int_rewards.reshape(ext_rewards.shape)
+        if self.int_heads:
+            log_novelty, int_rewards = agent.calc_novelty(
+                states[:,1:,:,:,:].reshape(-1, *states.shape[-n_dims:]) 
+                if self.use_pixels else 
+                states[:,1:,:].reshape(-1, *states.shape[-n_dims:])
+            )
+            int_rewards = int_rewards.reshape(ext_rewards.shape)
+        else:
+            log_novelty = torch.zeros_like(ext_rewards)
+            int_rewards = torch.zeros_like(ext_rewards)
         
         # Alias for actor-critic module
         actor_critic = agent.second_level_architecture
@@ -172,10 +176,11 @@ class MultiStep_Second_Level_SAC_PolicyOptimizer(Optimizer):
         #         )
         #     ))[:,1:,:].sum(-1)
         
-        next_v_target_int = (
-            PA_s.detach() * q_min[:,:,1,:]
-            )[:,1:,:].sum(-1)
-
+        if self.int_heads:
+            next_v_target_int = (
+                PA_s.detach() * q_min[:,:,1,:]
+                )[:,1:,:].sum(-1)
+            
         # Estimate q-value target by sampling Bellman expectation
         # TODO: Importance Sampling
         ext_rewards += self.discount_factor * (PA_s.detach() * (
@@ -191,10 +196,6 @@ class MultiStep_Second_Level_SAC_PolicyOptimizer(Optimizer):
                 [ext_rewards, torch.zeros_like(ext_rewards)[:,:-1]], 
                 dim=1
             )
-            padded_rewards_int = torch.cat(
-                [int_rewards, torch.zeros_like(int_rewards)[:,:-1]], 
-                dim=1
-            )
             padded_next_v_target_ext = torch.cat(
                 [
                     next_v_target_valid_ext, 
@@ -202,18 +203,27 @@ class MultiStep_Second_Level_SAC_PolicyOptimizer(Optimizer):
                 ], 
                 dim=1
             )
-            padded_next_v_target_int = torch.cat(
-                [
-                    next_v_target_int, 
-                    torch.zeros_like(next_v_target_int)[:,:-1]
-                ], 
-                dim=1
-            )
+
+            if self.int_heads:
+                padded_rewards_int = torch.cat(
+                    [int_rewards, torch.zeros_like(int_rewards)[:,:-1]], 
+                    dim=1
+                )
+                padded_next_v_target_int = torch.cat(
+                    [
+                        next_v_target_int, 
+                        torch.zeros_like(next_v_target_int)[:,:-1]
+                    ], 
+                    dim=1
+                )
+
         else:
             padded_rewards_ext = ext_rewards
-            padded_rewards_int = int_rewards
             padded_next_v_target_ext = next_v_target_valid_ext
-            padded_next_v_target_int = next_v_target_int
+            
+            if self.int_heads:
+                padded_rewards_int = int_rewards
+                padded_next_v_target_int = next_v_target_int
 
         discounted_sum_of_rewards_ext = [ext_rewards]
         for i in range(1, n_step_td):
@@ -225,15 +235,16 @@ class MultiStep_Second_Level_SAC_PolicyOptimizer(Optimizer):
             )
             discounted_sum_of_rewards_ext.append(rewards_sum_ext)
         
-        discounted_sum_of_rewards_int = [int_rewards]
-        for i in range(1, n_step_td):
-            partial_sum_rewards_int = discounted_sum_of_rewards_int[-1]
-            rewards_next_int = padded_rewards_int[:,i:i+n_step_td]
-            rewards_sum_int = (
-                partial_sum_rewards_int 
-                + self.discount_factor_int**i * rewards_next_int
-            )
-            discounted_sum_of_rewards_int.append(rewards_sum_int)
+        if self.int_heads:
+            discounted_sum_of_rewards_int = [int_rewards]
+            for i in range(1, n_step_td):
+                partial_sum_rewards_int = discounted_sum_of_rewards_int[-1]
+                rewards_next_int = padded_rewards_int[:,i:i+n_step_td]
+                rewards_sum_int = (
+                    partial_sum_rewards_int 
+                    + self.discount_factor_int**i * rewards_next_int
+                )
+                discounted_sum_of_rewards_int.append(rewards_sum_int)
 
         q_target_mixed_steps_ext_list = []
         for i in range(1, n_step_td+1):
@@ -245,28 +256,32 @@ class MultiStep_Second_Level_SAC_PolicyOptimizer(Optimizer):
             )
             q_target_mixed_steps_ext_list.append(q_target_i_steps)
 
-        q_target_mixed_steps_int_list = []
-        for i in range(1, n_step_td+1):
-            sum_int = discounted_sum_of_rewards_int[i-1]
-            value_ = padded_next_v_target_int[:,i-1:i-1+n_step_td]
-            q_target_i_steps = (
-                sum_int 
-                + self.discount_factor_int**i * value_
-            )
-            q_target_mixed_steps_int_list.append(q_target_i_steps)
+        if self.int_heads:
+            q_target_mixed_steps_int_list = []
+            for i in range(1, n_step_td+1):
+                sum_int = discounted_sum_of_rewards_int[i-1]
+                value_ = padded_next_v_target_int[:,i-1:i-1+n_step_td]
+                q_target_i_steps = (
+                    sum_int 
+                    + self.discount_factor_int**i * value_
+                )
+                q_target_mixed_steps_int_list.append(q_target_i_steps)
 
         q_target_mixed_steps_ext = torch.stack(
             q_target_mixed_steps_ext_list, dim=2
         )
 
-        q_target_mixed_steps_int = torch.stack(
-            q_target_mixed_steps_int_list, dim=2
-        )
+        if self.int_heads:
+            q_target_mixed_steps_int = torch.stack(
+                q_target_mixed_steps_int_list, dim=2
+            )
 
-        q_target_mixed_steps = torch.stack(
-            [q_target_mixed_steps_ext, q_target_mixed_steps_int],
-            dim=2
-        )
+            q_target_mixed_steps = torch.stack(
+                [q_target_mixed_steps_ext, q_target_mixed_steps_int],
+                dim=2
+            )
+        else:
+            q_target_mixed_steps = q_target_mixed_steps_ext.unsqueeze(2)
 
         # Importance sampling ratios
         off_action_lklhood = PA_s[:,:-1,:].detach().reshape(-1,n_actions)[
@@ -412,11 +427,14 @@ class MultiStep_Second_Level_SAC_PolicyOptimizer(Optimizer):
 
         # Calculate state-dependent temperature for current state
         if self.state_dependent_temperature:
-            log_novelty_state = agent.calc_novelty(
-                states[:,:-1,:,:,:].reshape(-1, *states.shape[-n_dims:])
-                if self.use_pixels else
-                states[:,:-1,:].reshape(-1, *states.shape[-n_dims:])
-            )[0]
+            if self.int_heads:
+                log_novelty_state = agent.calc_novelty(
+                    states[:,:-1,:,:,:].reshape(-1, *states.shape[-n_dims:])
+                    if self.use_pixels else
+                    states[:,:-1,:].reshape(-1, *states.shape[-n_dims:])
+                )[0]
+            else:
+                log_novelty_state = torch.zeros_like(ext_rewards)
             desired_entropy = torch.exp(
                 (log_novelty_state.clamp(
                     self.log_novelty_min, 
