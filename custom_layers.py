@@ -82,3 +82,44 @@ class Linear_noisy(nn.Module):
         return 'in_features={}, out_features={}'.format(
             self.in_features, self.out_features
         ) 
+
+class parallel_Linear_noisy(nn.Module):
+    def __init__(self, n_layers, in_features, out_features, init_noise=0.5):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.n_layers = n_layers
+ 
+        self.mean_weight = Parameter(torch.Tensor(n_layers, out_features, in_features))
+        self.std_weight = Parameter(torch.Tensor(n_layers, out_features, in_features))
+        self.mean_bias = Parameter(torch.Tensor(n_layers, out_features))
+        self.std_bias = Parameter(torch.Tensor(n_layers, out_features))        
+        self.reset_parameters(init_noise)
+        
+    def reset_parameters(self, init_noise=0.5):
+        bound = 1 / math.sqrt(self.in_features)
+        nn.init.uniform_(self.mean_weight, -bound, bound)
+        nn.init.uniform_(self.mean_bias, -bound, bound)
+        nn.init.constant_(self.std_weight, init_noise*bound)
+        nn.init.constant_(self.std_bias, init_noise*bound)
+
+    def forward(self, input):
+
+        if len(input.shape) == 2:
+            input_shape = 'ik'            
+        else:
+            input_shape = 'ijk'
+
+        ei = torch.randn(self.n_layers, 1, self.in_features).to(self.mean_weight.device)
+        ej = torch.randn(self.n_layers, self.out_features, 1).to(self.mean_weight.device)
+        ewij = torch.sign(ei)*torch.sign(ej)*((ei).abs().pow(0.5))*((ej).abs().pow(0.5))
+        ebj = (torch.sign(ej)*((ej).abs().pow(0.5))).squeeze(2)
+        weight = self.mean_weight + self.std_weight * ewij
+        bias = self.mean_bias + self.std_bias * ebj
+
+        return torch.einsum(input_shape+',jlk->ijl', input, weight) + bias.unsqueeze(0)
+
+    def extra_repr(self):
+        return 'in_features={}, out_features={}, bias={}'.format(
+            self.in_features, self.out_features, self.bias is not None
+        )

@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import Adam
 
-from custom_layers import Linear_noisy, parallel_Linear
+from custom_layers import Linear_noisy, parallel_Linear, parallel_Linear_noisy
 from vision_nets import vision_Net
 from net_utils import *
 
@@ -48,6 +48,108 @@ class q_Net(nn.Module):
 
 # Discrete action space
 #-------------------------------------------------
+class DuelingQNetwork(nn.Module):
+    """Actor (Policy) Model."""
+
+    def __init__(self, state_size, action_size, lr=1e-4, hidden_dim = 64):
+        """Initialize parameters and build model.
+        Params
+        ======
+            state_size (int): Dimension of each state
+            action_size (int): Dimension of each action
+            seed (int): Random seed
+        """        
+        super(DuelingQNetwork, self).__init__()
+        self.num_actions = action_size
+        fc3_1_size = fc3_2_size = 32
+        self.fc1 = nn.Linear(state_size, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        
+        ## Here we separate into two streams
+        # The one that calculate V(s)
+        self.fc3_1 = nn.Linear(hidden_dim, fc3_1_size)
+        self.fc4_1 = nn.Linear(fc3_1_size, 1)
+
+        # The one that calculate A(s,a)
+        self.fc3_2 = nn.Linear(hidden_dim, fc3_2_size)
+        self.fc4_2 = nn.Linear(fc3_2_size, action_size)
+
+        self.optimizer = Adam(self.parameters(), lr=lr)
+
+    def forward(self, state):
+        """Build a network that maps state -> action values."""
+        x = F.relu(self.fc1(state))
+        x = F.relu(self.fc2(x))
+
+        val = F.relu(self.fc3_1(x))
+        val = self.fc4_1(val)
+        
+        adv = F.relu(self.fc3_2(x))
+        adv = self.fc4_2(adv)
+        # Q(s,a) = V(s) + (A(s,a) - 1/|A| * sum A(s,a'))
+        action = val + adv - adv.mean(1).unsqueeze(1).expand(state.size(0), self.num_actions)
+        return action
+
+
+class dueling_q_Net(nn.Module):
+    def __init__(
+        self, 
+        s_dim: int, 
+        n_actions: int,
+        lr: float = 1e-4, 
+        dueling_layers: int = 2,
+        hidden_dim: int = 256,
+        hidden_dim_2: int = 32,
+        n_heads: int = 1,
+        noisy: bool = False,
+        init_noise: float = 0.5
+        ):
+        super().__init__() 
+        
+        self.s_dim = s_dim
+        self.n_actions = n_actions
+        self.n_heads = n_heads
+
+        if noisy:
+            linear_layer = parallel_Linear_noisy
+        else:
+            linear_layer = parallel_Linear
+
+        self.common_pipe = nn.Sequential(
+                linear_layer(n_heads, s_dim, hidden_dim, init_noise=init_noise),
+                nn.ReLU(),
+                linear_layer(n_heads, hidden_dim, hidden_dim, init_noise=init_noise)
+            )
+        
+        if dueling_layers == 2:
+            self.V_pipe = nn.Sequential(
+                linear_layer(n_heads, hidden_dim, hidden_dim_2, init_noise=init_noise),
+                nn.ReLU(),
+                linear_layer(n_heads, hidden_dim_2, 1, init_noise=init_noise)
+            )
+            self.A_pipe = nn.Sequential(
+                linear_layer(n_heads, hidden_dim, hidden_dim_2, init_noise=init_noise),
+                nn.ReLU(),
+                linear_layer(n_heads, hidden_dim_2, n_actions, init_noise=init_noise)
+            )
+
+        elif dueling_layers == 1:
+            self.V_pipe = linear_layer(n_heads, hidden_dim, 1, init_noise=init_noise)
+            self.A_pipe = linear_layer(n_heads, hidden_dim, n_actions, init_noise=init_noise)
+            
+        else:
+            raise ValueError("Invalid number of dueling layers")
+       
+        self.optimizer = Adam(self.parameters(), lr=lr)
+        
+    def forward(self, s):        
+        x = F.relu(self.common_pipe(s))
+        V = self.V_pipe(x)
+        A = self.A_pipe(x)
+        Q = V + A - A.mean(-1, keepdim=True) 
+        return Q
+
+
 class multihead_dueling_q_Net(nn.Module):
     def __init__(
         self, s_dim, n_actions, n_heads, 
@@ -81,9 +183,6 @@ class multihead_dueling_q_Net(nn.Module):
         V = self.lV(x)        
         A = self.lA(x)
         Q = V + A - A.mean(2, keepdim=True) 
-        Q = Q.reshape(
-            s.shape[0], -1, self._n_heads, self.n_actions
-        )
         return Q
 
 

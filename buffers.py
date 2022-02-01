@@ -61,32 +61,32 @@ class ExperienceBuffer:
             states, actions, rewards, dones, next_states = \
                 zip(*[self.buffer[idx] for idx in indices])
 
-            return np.array(states), np.array(actions), \
+            return np.array(states, dtype=np.float32), np.array(actions), \
                np.array(rewards, dtype=np.float32), \
                np.array(dones, dtype=np.uint8), \
-               np.array(next_states)
+               np.array(next_states, dtype=np.float32)
 
         elif self._level == 2:
             pixels, actions, rewards, \
                 dones, next_pixels = \
                 zip(*[self.buffer[idx] for idx in indices])
 
-            return np.array(pixels, dtype=np.uint8), \
+            return np.array(pixels, dtype=np.float32), \
                 np.array(actions, dtype=np.uint8), \
                 np.array(rewards, dtype=np.float32), \
                 np.array(dones, dtype=np.uint8), \
-                np.array(next_pixels, dtype=np.uint8)
+                np.array(next_pixels, dtype=np.float32)
         
         elif self._level == 3:
             pixels, actions, rewards, \
                 dones, next_pixels, tasks = \
                 zip(*[self.buffer[idx] for idx in indices])
 
-            return np.array(pixels, dtype=np.uint8), \
+            return np.array(pixels, dtype=np.float32), \
                 np.array(actions, dtype=np.uint8), \
                 np.array(rewards, dtype=np.float32), \
                 np.array(dones, dtype=np.uint8), \
-                np.array(next_pixels, dtype=np.uint8), \
+                np.array(next_pixels, dtype=np.float32), \
                 np.array(tasks, dtype=np.uint8)
         
         elif self._level == 4:
@@ -94,12 +94,12 @@ class ExperienceBuffer:
                 dones, next_pixels = \
                 zip(*[self.buffer[idx] for idx in indices])
 
-            return np.array(pixels, dtype=np.uint8), \
+            return np.array(pixels, dtype=np.float32), \
                 np.array(actions, dtype=np.uint8), \
                 np.array(a_distributions, dtype=np.float32), \
                 np.array(rewards, dtype=np.float32), \
                 np.array(dones, dtype=np.uint8), \
-                np.array(next_pixels, dtype=np.uint8)
+                np.array(next_pixels, dtype=np.float32)
 
     
     def sample(self, batch_size, random_sample=True, to_torch=True, dev_name='cuda'):
@@ -125,12 +125,10 @@ class ExperienceBuffer:
                 self.sample_numpy(batch_size, random_sample)
             
             if to_torch:
-                device = torch.device(dev_name)
-                pixels = pixels.astype(np.float)/255.
+                device = torch.device(dev_name)                
                 pixels_th = torch.FloatTensor(pixels).to(device)
                 rewards_th = torch.FloatTensor(rewards).view(-1,1).to(device)
                 dones_th = torch.ByteTensor(dones).view(-1,1).float().to(device)
-                next_pixels = next_pixels.astype(np.float)/255.
                 next_pixels_th = torch.FloatTensor(next_pixels).to(device)
                 return pixels_th, actions.astype('int'), rewards_th, \
                     dones_th, next_pixels_th
@@ -146,11 +144,9 @@ class ExperienceBuffer:
             
             if to_torch:
                 device = torch.device(dev_name)
-                pixels = pixels.astype(np.float)/255.
                 pixels_th = torch.FloatTensor(pixels).to(device)
                 rewards_th = torch.FloatTensor(rewards).view(-1,1).to(device)
                 dones_th = torch.ByteTensor(dones).view(-1,1).float().to(device)
-                next_pixels = next_pixels.astype(np.float)/255.
                 next_pixels_th = torch.FloatTensor(next_pixels).to(device)
                 return pixels_th, actions.astype('int'), rewards_th, \
                     dones_th, next_pixels_th, tasks.astype('int')
@@ -167,12 +163,10 @@ class ExperienceBuffer:
             
             if to_torch:
                 device = torch.device(dev_name)
-                pixels = pixels.astype(np.float)/255.
                 pixels_th = torch.FloatTensor(pixels).to(device)
                 a_distributions_th = torch.FloatTensor(a_distributions).to(device)
                 rewards_th = torch.FloatTensor(rewards).view(-1,1).to(device)
                 dones_th = torch.ByteTensor(dones).view(-1,1).float().to(device)
-                next_pixels = next_pixels.astype(np.float)/255.
                 next_pixels_th = torch.FloatTensor(next_pixels).to(device)
                 return pixels_th, actions.astype('int'), a_distributions_th, rewards_th, \
                     dones_th, next_pixels_th

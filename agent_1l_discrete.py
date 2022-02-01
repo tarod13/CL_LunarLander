@@ -21,13 +21,13 @@ def create_second_level_agent(
     lr_alpha: float = 1e-4, lr_actor: float = 1e-4, 
     rnd_out_dim: int = 128, int_heads: bool = False,
     input_channels: int = 1, height: int = 21, 
-    width: int = 79
+    width: int = 79, hidden_dim : int = 256
     ):
     
     second_level_architecture = discrete_actor_critic_Net(
         n_actions+int(noop_action), feature_dim, use_pixels, n_heads, 
         init_log_alpha, input_channels, height, width,
-        parallel, lr, lr_alpha, lr_actor, int_heads
+        parallel, lr, lr_alpha, lr_actor, int_heads, hidden_dim
     )
 
     if int_heads:
@@ -75,14 +75,14 @@ class Second_Level_Agent(nn.Module):
     def calc_novelty(self, obs):
         return self.rnd_module.calc_novelty(obs)
     
-    def sample_action(self, state, explore=True):
+    def sample_action(self, state, explore=True, use_actor=True, eps=0.0):
         if self._use_pixels:
             obs = self.observe_second_level_state(state)
         else:
             obs = np2torch(state)
         with torch.no_grad():
             action, dist = self.second_level_architecture.sample_action(
-                obs, explore=explore)            
+                obs, explore, use_actor, eps)            
             return action, dist
 
     def observe_second_level_state(self, state):

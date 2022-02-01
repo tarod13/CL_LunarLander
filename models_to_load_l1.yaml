@@ -1,0 +1,13 @@
+---
+env_model_pairs: 
+  CARLLunarLander-Gx:5-Gy:-8.660254037844386: 
+    id: 2022-01-29_18-37-29
+    Gx: 5
+    Gy: -8.660254037844386
+    RI: 1000
+  CARLLunarLander-Gx:0-Gy:-10: 
+    id: 2022-01-29_22-43-14
+    Gx: 0
+    Gy: -10
+    RI: 1000
+

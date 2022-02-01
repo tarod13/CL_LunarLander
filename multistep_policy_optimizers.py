@@ -85,6 +85,8 @@ class MultiStep_Second_Level_SAC_PolicyOptimizer(Optimizer):
             dones, dists = \
             database.sample(self.batch_size, n_step=n_step_td)      
 
+        #ext_rewards /= 100.0
+
         q_target = 0.0
         log_softmax_target = 0.0
         HA_s_mean = 0.0

@@ -4,8 +4,8 @@ import gym
 
 
 from agent_1l_discrete import create_second_level_agent as create_agent
-from episode_buffers import EpisodeExperienceBuffer as Buffer
-from multistep_trainers import MutiStep_Second_Level_Trainer as Trainer
+from buffers import ExperienceBuffer as Buffer
+from trainers import Second_Level_Trainer as Trainer
 from carl.envs import CARLLunarLanderEnv_defaults as default_params
 from carl.envs import CARLLunarLanderEnv
 
@@ -24,56 +24,51 @@ DEFAULT_ENV_NAME = (
     +f'Gy:{DEFAULT_GRAVITY_Y}'
 )
 DEFAULT_N_STEPS_IN_SECOND_LEVEL_EPISODE = 1000
-DEFAULT_BUFFER_SIZE = 5000
+DEFAULT_ACTOR_LOSS = 'mse'
+DEFAULT_BUFFER_SIZE = 1000000
 DEFAULT_N_EPISODES = 20000
 DEFAULT_ID = '2001-01-15_19-10-56'
 DEFAULT_CLIP_Q_ERROR = False
 DEFAULT_CLIP_VALUE_Q_ERROR = 5.0
 DEFAULT_CLIP_VALUE = 1.0
+DEFAULT_CLIP_ACTOR_DIVERGENCE = False
+DEFAULT_CLIP_ACTOR_VALUE = 1.0
 DEFAULT_DISCOUNT_FACTOR = 0.99
-DEFAULT_DISCOUNT_FACTOR_INT = 0.99
-DEFAULT_BATCH_SIZE = 256
-DEFAULT_MIN_EPSILON = 0.2
-DEFAULT_INIT_EPSILON = 0.5
-DEFAULT_DELTA_EPSILON = 1e-4
+DEFAULT_BATCH_SIZE = 64
+DEFAULT_MIN_EPSILON = 0.01
+DEFAULT_INIT_EPSILON = 1.0
+DEFAULT_DELTA_EPSILON = 0
+DEFAULT_DECAY_EPSILON = 0.995
 DEFAULT_ENTROPY_FACTOR = 0.1
 DEFAULT_ENTROPY_UPDATE_RATE = 0.005
 DEFAULT_WEIGHT_Q_LOSS = 0.5
-DEFAULT_INIT_LOG_ALPHA = 0.0
+DEFAULT_INIT_LOG_ALPHA = -20
 DEFAULT_LEARN_ALPHA = False
-DEFAULT_LR = 3e-4
-DEFAULT_LR_ACTOR = 3e-4 
+DEFAULT_LR = 1e-3
+DEFAULT_LR_ACTOR = 1e-3 
 DEFAULT_LR_ALPHA = 1e-3 
 DEFAULT_ALPHA_V_WEIGHT = 0
 DEFAULT_INITIALIZE_SAC = False
-DEFAULT_INITIALIZE_RND = False
 DEFAULT_INITIALIZATION_STEPS_SAC = 20000
-DEFAULT_INITIALIZATION_STEPS_RND = 20000
 DEFAULT_NOISY_ACTOR_CRITIC = False
 DEFAULT_SAVE_STEP_EACH = 1
 DEFAULT_TRAIN_EACH = 1
 DEFAULT_N_STEP_TD = 1
 DEFAULT_PARALLEL_Q_NETS = True
 DEFAULT_N_HEADS = 2
-DEFAULT_VISION_LATENT_DIM = 32
+DEFAULT_HIDDEN_DIM = 64
 DEFAULT_N_AGENTS = 1
 DEFAULT_NORMALIZE_Q_ERROR = True
 DEFAULT_RESTRAIN_POLICY_UPDATE = False
-DEFAULT_USE_H_MEAN = True
+DEFAULT_USE_H_MEAN = False
 DEFAULT_USE_ENTROPY = True
 DEFAULT_NORMALIZE_Q_DIST = False #True
-DEFAULT_TARGET_UPDATE_RATE = 5e-3
-DEFAULT_STATE_DEPENDENT_TEMPERATURE = False
-DEFAULT_ACTOR_LOSS = 'jeffreys'
-DEFAULT_C_MINUS_TEMP_SEARCH = 1e-6
-DEFAULT_RND_OUT_DIM = 64
-DEFAULT_LOG_NOVELTY_MIN = -10
-DEFAULT_LOG_NOVELTY_MAX = -6
+DEFAULT_TARGET_UPDATE_RATE = 5e-2
 DEFAULT_EVAL_GREEDY = True
-DEFAULT_GRAYSCALE = False
-DEFAULT_USE_INT_HEADS = False
 DEFAULT_USE_PIXELS = False
+DEFAULT_USE_ACTOR = False
 DEFAULT_WRAPPER_SCALE = 0.25
+DEFAULT_REWARD_SCALE = 0.1
 
 if __name__ == "__main__":    
     parser = argparse.ArgumentParser()
@@ -85,16 +80,17 @@ if __name__ == "__main__":
     parser.add_argument("--env_name", default=DEFAULT_ENV_NAME, help="Name of the environment, default=" + DEFAULT_ENV_NAME)
     parser.add_argument("--n_steps_in_second_level_episode", default=DEFAULT_N_STEPS_IN_SECOND_LEVEL_EPISODE, help="Number of second decision" +
         "level steps taken in each episode, default=" + str(DEFAULT_N_STEPS_IN_SECOND_LEVEL_EPISODE))
+    parser.add_argument("--actor_loss", default=DEFAULT_ACTOR_LOSS, help="Function used to train the actor")
     parser.add_argument("--buffer_size", default=DEFAULT_BUFFER_SIZE, help="Size of replay buffer, default=" + str(DEFAULT_BUFFER_SIZE))
     parser.add_argument("--n_episodes", default=DEFAULT_N_EPISODES, type=int, help="Number of episodes, default=" + str(DEFAULT_N_EPISODES))
     parser.add_argument("--discount_factor", default=DEFAULT_DISCOUNT_FACTOR, help="Discount factor (0,1), default=" + str(DEFAULT_DISCOUNT_FACTOR))
-    parser.add_argument("--discount_factor_int", default=DEFAULT_DISCOUNT_FACTOR_INT, help="Discount factor for inner rewards (0,1), default=" + str(DEFAULT_DISCOUNT_FACTOR_INT))
     parser.add_argument("--batch_size", default=DEFAULT_BATCH_SIZE, help="Batch size, default=" + str(DEFAULT_BATCH_SIZE))
     parser.add_argument("--clip_q_error", default=DEFAULT_CLIP_Q_ERROR, help="Clip q error wrt targets, default=" + str(DEFAULT_CLIP_Q_ERROR))
     parser.add_argument("--clip_value_q_error", default=DEFAULT_CLIP_VALUE_Q_ERROR, help="Clip value when clipping q error wrt targets, default=" + str(DEFAULT_CLIP_VALUE_Q_ERROR))
     parser.add_argument("--init_epsilon", default=DEFAULT_INIT_EPSILON, help="Initial annealing factor for entropy, default=" + str(DEFAULT_INIT_EPSILON))
     parser.add_argument("--min_epsilon", default=DEFAULT_MIN_EPSILON, help="Minimum annealing factor for entropy, default=" + str(DEFAULT_MIN_EPSILON))
     parser.add_argument("--delta_epsilon", default=DEFAULT_DELTA_EPSILON, help="Decreasing rate of annealing factor for entropy, default=" + str(DEFAULT_DELTA_EPSILON))
+    parser.add_argument("--decay_epsilon", default=DEFAULT_DECAY_EPSILON, help="Decreasing factor of exploration rate, default=" + str(DEFAULT_DECAY_EPSILON))
     parser.add_argument("--entropy_factor", default=DEFAULT_ENTROPY_FACTOR, help="Entropy coefficient, default=" + str(DEFAULT_ENTROPY_FACTOR))
     parser.add_argument("--entropy_update_rate", default=DEFAULT_ENTROPY_UPDATE_RATE, help="Mean entropy update rate, default=" + str(DEFAULT_ENTROPY_UPDATE_RATE))
     parser.add_argument("--weight_q_loss", default=DEFAULT_WEIGHT_Q_LOSS, help="Weight of critics' loss, default=" + str(DEFAULT_WEIGHT_Q_LOSS))
@@ -105,7 +101,6 @@ if __name__ == "__main__":
     parser.add_argument("--lr_alpha", default=DEFAULT_LR_ALPHA, help="Learning rate for temperature, default=" + str(DEFAULT_LR_ALPHA))
     parser.add_argument("--alpha_v_weight", default=DEFAULT_ALPHA_V_WEIGHT, help="Weight for entropy velocity in temperature loss, default=" + str(DEFAULT_ALPHA_V_WEIGHT))
     parser.add_argument("--init_sac", default=DEFAULT_INITIALIZE_SAC, help="Initialize the replay buffer of the agent by acting randomly for a specified number of steps ")
-    parser.add_argument("--init_rnd", default=DEFAULT_INITIALIZE_RND, help="Initialize the observations statistics in the RND module by acting randomly for a specified number of steps ")
     parser.add_argument("--init_steps_sac", default=DEFAULT_INITIALIZATION_STEPS_SAC, help="Minimum observations in replay buffer to start learning, default=" + str(DEFAULT_INITIALIZATION_STEPS_SAC))
     parser.add_argument("--load_id", default=None, help="Model ID to load, default=None")
     parser.add_argument("--load_best", action="store_true", help="If flag is used the best model will be loaded (if ID is provided)")
@@ -119,23 +114,18 @@ if __name__ == "__main__":
     parser.add_argument("--normalize_q_error", default=DEFAULT_NORMALIZE_Q_ERROR, help="Normalize critic error dividing by maximum, default=" + str(DEFAULT_NORMALIZE_Q_ERROR))
     parser.add_argument("--restrain_pi_update", default=DEFAULT_RESTRAIN_POLICY_UPDATE, help="Penalize policy changes that are too large, default=" + str(DEFAULT_RESTRAIN_POLICY_UPDATE))
     parser.add_argument("--clip_value", default=DEFAULT_CLIP_VALUE, help="Clip value for optimizer")
+    parser.add_argument("--clip_actor", default=DEFAULT_CLIP_ACTOR_DIVERGENCE, help="Clip divergence in actor loss")
+    parser.add_argument("--clip_actor_value", default=DEFAULT_CLIP_ACTOR_VALUE, help="Limit divergence accepted in actor loss")
     parser.add_argument("--n_agents", default=DEFAULT_N_AGENTS, type=int, help="Number of agents")
-    parser.add_argument("--state_dependent_temp", default=DEFAULT_STATE_DEPENDENT_TEMPERATURE, help="Wether the entropy temperature should be state-dependent or not")
     parser.add_argument("--use_H_mean", default=DEFAULT_USE_H_MEAN, help="Wether to use H mean in SAC's critic loss")
-    parser.add_argument("--use_int_heads", default=DEFAULT_USE_INT_HEADS, help="Wether to use q-value heads for intrinsic RND return")
     parser.add_argument("--use_entropy", default=DEFAULT_USE_ENTROPY, help="Use SAC with or without entropy")
     parser.add_argument("--normalize_q_dist", default=DEFAULT_NORMALIZE_Q_DIST, help="Normalize q target distribution")
     parser.add_argument("--target_update_rate", default=DEFAULT_TARGET_UPDATE_RATE, help="Update rate for target q networks")
-    parser.add_argument("--actor_loss", default=DEFAULT_ACTOR_LOSS, help="Function used to train the actor")
-    parser.add_argument("--c_minus_temp_search", default=DEFAULT_C_MINUS_TEMP_SEARCH, help="Coefficient use to initialize lower bounds in temperature search")
-    parser.add_argument("--rnd_out_dim", default=DEFAULT_RND_OUT_DIM, help="Dimension of RND networks' output")
-    parser.add_argument("--log_novelty_min", default=DEFAULT_LOG_NOVELTY_MIN, help="Lower bound for log novelty when converting to desired entropy")
-    parser.add_argument("--log_novelty_max", default=DEFAULT_LOG_NOVELTY_MAX, help="Upper bound for log novelty when converting to desired entropy")
-    parser.add_argument("--grayscale", default=DEFAULT_GRAYSCALE, help="Use grayscale for observations")
     parser.add_argument("--wrapper_scale", default=DEFAULT_WRAPPER_SCALE, help="Fraction of the original observations in use (0,1]")
+    parser.add_argument("--reward_scale", default=DEFAULT_REWARD_SCALE, help="Reward scale")
     parser.add_argument("--use_pixels", default=DEFAULT_USE_PIXELS, help="Use pixels instead of vector state information")
-    parser.add_argument("--vision_latent_dim", default=DEFAULT_VISION_LATENT_DIM, help="Dimensionality of feature vector added to inner state, default=" + 
-        str(DEFAULT_VISION_LATENT_DIM))
+    parser.add_argument("--use_actor", default=DEFAULT_USE_ACTOR, help="Use actor or explore with soft-epsilon policy")
+    parser.add_argument("--hidden_dim", default=DEFAULT_HIDDEN_DIM, help="Hidden dim in actor and critics, default=" + str(DEFAULT_HIDDEN_DIM))
     args = parser.parse_args()
 
     MODEL_PATH = '/home/researcher/Diego/CL_LunarLander/saved_models/'
@@ -147,7 +137,6 @@ if __name__ == "__main__":
         'learn_alpha': args.learn_alpha,
         'batch_size': args.batch_size, 
         'discount_factor': args.discount_factor,
-        'discount_factor_int': args.discount_factor_int,
         'init_epsilon': args.init_epsilon,
         'min_epsilon': args.min_epsilon,
         'delta_epsilon': args.delta_epsilon,
@@ -164,13 +153,10 @@ if __name__ == "__main__":
         'normalize_q_error': args.normalize_q_error,
         'normalize_q_dist': args.normalize_q_dist,
         'target_update_rate': args.target_update_rate,
-        'state_dependent_temperature': args.state_dependent_temp,
+        'clip_actor': args.clip_actor,
+        'clip_actor_value': args.clip_actor_value,
         'actor_loss_function': args.actor_loss,
-        'c_minus_temp_search': args.c_minus_temp_search,
-        'log_novelty_min': args.log_novelty_min,
-        'log_novelty_max': args.log_novelty_max,
-        'int_heads': args.use_int_heads,
-        'use_pixels': args.use_pixels,
+        'reward_scale': args.reward_scale,
     }
 
     store_video = args.eval
@@ -189,15 +175,12 @@ if __name__ == "__main__":
     env_params["GRAVITY_X"] = args.gx   # TODO: add bounds
     env_params["GRAVITY_Y"] = args.gy
     contexts = {0: env_params}
-    #env = CARLLunarLanderEnv(contexts=contexts)
-    env = gym.make('LunarLander-v2')
+    env = CARLLunarLanderEnv(contexts=contexts, hide_context=True)
+    # env = gym.make('LunarLander-v2')
 
     n_actions = env.action_space.n
     optimizer_kwargs['n_actions'] = n_actions
-    feature_dim = (
-        args.vision_latent_dim if args.use_pixels 
-        else env.observation_space.shape[0]
-    )
+    feature_dim = env.observation_space.shape[0]
 
     agent = create_agent(
         use_pixels=args.use_pixels, n_actions=n_actions, 
@@ -205,10 +188,7 @@ if __name__ == "__main__":
         init_log_alpha=args.init_log_alpha, 
         feature_dim=feature_dim, parallel=args.parallel_q_nets,
         lr=args.lr, lr_alpha=args.lr_alpha, lr_actor=args.lr_actor,
-        rnd_out_dim=args.rnd_out_dim, int_heads=args.use_int_heads,
-        input_channels=(1 if args.grayscale else 3),
-        height=int(args.wrapper_scale*336),
-        width=int(args.wrapper_scale*1264)
+        int_heads=False, hidden_dim=args.hidden_dim
         )
     
     if args.load_id is not None:
@@ -221,7 +201,7 @@ if __name__ == "__main__":
     
     os.makedirs(MODEL_PATH + args.env_name, exist_ok=True)
 
-    database = Buffer(args.buffer_size)
+    database = Buffer(args.buffer_size, level=2)
 
     trainer = Trainer(optimizer_kwargs=optimizer_kwargs)
     returns = trainer.loop(
@@ -231,8 +211,8 @@ if __name__ == "__main__":
         MODEL_PATH=MODEL_PATH+args.env_name, train=(not args.eval),
         save_step_each=args.save_step_each, train_each=args.train_each, 
         n_step_td=args.n_step_td, greedy_sampling=args.eval_greedy,
-        init_sac=args.init_sac, init_rnd=args.init_rnd, 
-        init_steps_sac=args.init_steps_sac
+        initialization=args.init_sac, init_buffer_size=args.init_steps_sac,
+        use_actor=args.use_actor, decay_epsilon=args.decay_epsilon
     )
     G = returns.mean()    
     print("Mean episode return: {:.2f}".format(G)) 
