@@ -36,13 +36,13 @@ class softmax_policy_Net(nn.Module):
             self.logits_layer            
         )        
         
-        if not noisy:
-            self.logit_pipe.apply(weights_init_rnd)
-            torch.nn.init.orthogonal_(self.logits_layer.weight, 0.01)
-            self.logits_layer.bias.data.zero_()
-        else:
-            torch.nn.init.orthogonal_(self.logits_layer.mean_weight, 0.01)
-            self.logits_layer.mean_bias.data.zero_()
+        # if not noisy:
+        #     self.logit_pipe.apply(weights_init_rnd)
+        #     torch.nn.init.orthogonal_(self.logits_layer.weight, 0.01)
+        #     self.logits_layer.bias.data.zero_()
+        # else:
+        #     torch.nn.init.orthogonal_(self.logits_layer.mean_weight, 0.01)
+        #     self.logits_layer.mean_bias.data.zero_()
             
         self.optimizer = Adam(self.parameters(), lr=lr)
         

@@ -10,15 +10,16 @@ from net_utils import *
 
 
 class concept_Net(nn.Module):
-    def __init__(self, s_dim, n_concepts, noisy=False):
+    def __init__(self, s_dim, latent_dim, n_concepts, noisy=False, lr=1e-4):
         super().__init__()
 
-        self.classifier = softmax_policy_Net(s_dim, n_concepts, noisy=noisy)
+        self.classifier = softmax_policy_Net(
+            s_dim, n_concepts, noisy=noisy, lr=lr, latent_dim=latent_dim)
         self._n_concepts = n_concepts
 
     def forward(self, s):
         PS_s, log_PS_s = self.classifier(s)
-        return PS_s, log_PS_s 
+        return PS_s, log_PS_s
 
 
 class SA_concept_Net(nn.Module):

@@ -18,10 +18,11 @@ import os
 LOAD_PATH = '/home/researcher/Diego/CL_LunarLander/saved_models/'
 SAVE_PATH = '/home/researcher/Diego/CL_LunarLander/saved_data/'
 
-DEFAULT_AVERAGE_STEPS = 200
+DEFAULT_AVERAGE_STEPS = 400
 DEFAULT_BUFFER_SIZE = 1000000
 DEFAULT_FILE = 'models_to_load_l1.yaml'
 DEFAULT_HIDDEN_DIM = 64
+DEFAULT_LOAD_BEST = True
 DEFAULT_MAX_STEPS = 1000
 DEFAULT_N_HEADS = 2
 DEFAULT_N_PARTS = 40
@@ -30,22 +31,32 @@ DEFAULT_USE_SAC_BASELINES = False
 
 
 def load_agent(
-    env_name, 
+    agent_path, 
     model_id, 
-    load_best=True, 
-    n_heads=2, 
-    latent_dim=256
+    n_actions=4,
+    s_dim=8,
+    hidden_dim=64,
+    hidden_dim_2=32,
+    dueling_layers=2,
+    n_heads=2,
+    noisy_q_nets=False,
+    load_best=True 
     ):
     
     agent = create_agent(
-        n_heads=n_heads, 
-        latent_dim=latent_dim
-    )
+        n_actions = n_actions, 
+        feature_dim = s_dim, 
+        hidden_dim = hidden_dim,
+        hidden_dim_2 = hidden_dim_2,
+        dueling_layers = dueling_layers,
+        n_heads = n_heads,
+        noisy_q_nets = noisy_q_nets
+        )
 
     if load_best:
-        agent.load(LOAD_PATH + '/' + env_name + '/best_', model_id)
+        agent.load(agent_path + '/best_', model_id)
     else:
-        agent.load(LOAD_PATH + '/' + env_name + '/last_', model_id)
+        agent.load(agent_path + '/last_', model_id)
     return agent
 
 
@@ -56,7 +67,7 @@ def store_database(database, n_parts):
     os.makedirs(SAVE_PATH + DB_ID)
 
     for i in range(0, n_parts):
-        PATH = SAVE_PATH + DB_ID + '/SAC_training_level2_database_part_' + str(i) + '.p'
+        PATH = SAVE_PATH + DB_ID + '/DuelingDDQN_training_level1_database_part_' + str(i) + '.p'
 
         if (i+1) < n_parts:
             pickle.dump(list(itertools.islice(database.buffer, part_size*i, part_size*(i+1))), open(PATH, 'wb'))
@@ -71,7 +82,7 @@ if __name__ == "__main__":
     parser.add_argument("--cpu", action="store_true", help="Disable cuda")
     parser.add_argument("--file", default=DEFAULT_FILE, help="Name of the folder wih the model info. needed to load them, default=" + DEFAULT_FILE)
     parser.add_argument("--hidden_dim", default=DEFAULT_HIDDEN_DIM, help="Hidden dim in actor and critics, default=" + str(DEFAULT_HIDDEN_DIM))
-    parser.add_argument("--load_best", action="store_false", help="If flag is used, the last, instead of the best, model will be loaded")
+    parser.add_argument("--load_best", default=DEFAULT_LOAD_BEST, help="If False, the last, instead of the best, model will be loaded")
     parser.add_argument("--max_steps", default=DEFAULT_MAX_STEPS, help="Max number of steps taken in each episode, default=" + str(DEFAULT_MAX_STEPS))
     parser.add_argument("--n_heads", default=DEFAULT_N_HEADS, help="Number of heads in the critic, default=" + str(DEFAULT_N_HEADS))
     parser.add_argument("--n_parts", default=DEFAULT_N_PARTS, help="Number of parts in which the database is divided and store, default=" + str(DEFAULT_N_PARTS))
@@ -96,16 +107,26 @@ if __name__ == "__main__":
         env_params["INITIAL_RANDOM"] = info['RI']
         contexts = {0: env_params}
         env = CARLLunarLanderEnv(contexts=contexts, hide_context=True)
+        env_name = (
+            f'CARLLunarLander-'
+            +f"Gx:{info['Gx']}-"
+            +f"Gy:{info['Gy']}-"
+            +f"IR:{info['RI']}"
+        )
+        agent_path = LOAD_PATH + env_name
 
         model_id = info['id']
-        agent = load_agent(env_name, model_id, True, args.sac_baselines, 
-                            args.noisy_ac, args.n_heads, args.hidden_dim,
-                            args.parallel_q_nets)
+        agent = load_agent(
+            agent_path, model_id, load_best=args.load_best
+        )
     
-        returns = trainer.loop(env, [agent], task_database, n_episodes=n_episodes, render=False, 
-                                max_episode_steps=args.n_steps, store_video=False, wandb_project=False, save_model=False, 
-                                MODEL_PATH=LOAD_PATH, train=False, initialization=False, greedy_sampling=True,
-                                save_step_each=args.save_step_each, n_step_td=1)
+        print("Populating database of Env " + env_name)
+        returns = trainer.loop(
+            env, agent, task_database, n_episodes=n_episodes//n_envs, train=False, 
+            max_episode_steps=args.max_steps, save_model=False, MODEL_PATH=agent_path, 
+            eval_greedy=True, eval_each=20, save_step_each=args.save_step_each,
+            use_actor=False
+        )
         G = returns.mean()    
         print("Env: " + env_name + ", Mean episode return: {:.2f}".format(G))
 

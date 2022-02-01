@@ -1,10 +1,13 @@
-import numpy as np
-import torch
 import random
 import time
 import datetime
-import yaml
 import pickle
+import yaml
+import json
+import numpy as np
+import torch
+import pandas as pd
+import wandb
 
 from buffers import ExperienceBuffer
 
@@ -62,10 +65,14 @@ def load_env_model_pairs(file):
         raise RuntimeError('Invalid file. It should be a dictionary with name "env_model_pairs"')
     return env_model_pairs
 
-def load_database(n_parts, LOAD_PATH, DB_ID, buffer_size ,level):
+def load_database(n_parts, LOAD_PATH, DB_ID, buffer_size ,level, algorithm: str = 'SAC'):
     database = ExperienceBuffer(buffer_size, level)
     for i in range(0, n_parts):
-        PATH = LOAD_PATH + DB_ID + '/SAC_training_level2_database_part_' + str(i) + '.p'
+        if algorithm == 'SAC':
+            description = '/SAC_training_level2_database_part_'
+        else:
+            description = '/DuelingDDQN_training_level1_database_part_'
+        PATH = LOAD_PATH + DB_ID + description + str(i) + '.p'
         database.buffer += pickle.load(open(PATH, 'rb'))
     return database
 
@@ -76,6 +83,37 @@ def separate_database(database):
     test_steps = [train_database.buffer.pop() for x in range(0,database._capacity//10)]
     test_database.buffer.extend(test_steps)
     return train_database, test_database
+
+def load_policy_PA_ST(
+    artifact_id: str, 
+    wandb_run, 
+    user_id='tarod13', 
+    project_name='visualSAC_conceptual_level'
+    ):
+    
+    # Download artifact
+    artifact_wandb_path = user_id+'/'+project_name+'/'+artifact_id
+    artifact = wandb_run.use_artifact(artifact_wandb_path, type='run_table')
+    artifact_dir = artifact.download()
+
+    # Load artifact in data_
+    with open(artifact.file()) as f: 
+        data_ = json.load(f)
+
+    # Extract policy
+    PA_ST_df = pd.DataFrame(columns=data_['columns'], data=data_['data'])
+    PA_ST_df[['T','S','A']] = PA_ST_df[['T','S','A']].astype(np.int64)
+
+    # Calculate dimensions
+    NT = len(PA_ST_df['T'].unique())
+    NS = len(PA_ST_df['S'].unique())
+    NA = len(PA_ST_df['A'].unique())
+
+    # Reshape policy    
+    PA_ST_np = PA_ST_df['P(A|S,T)'].to_numpy()
+    PA_ST_torch = torch.FloatTensor(PA_ST_np.reshape(NT,NS,NA))
+
+    return PA_ST_torch
 
 def temperature_search(
     q_values: torch.Tensor, 

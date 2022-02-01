@@ -91,6 +91,17 @@ class DuelingQNetwork(nn.Module):
         return action
 
 
+def linear_layer_(n_heads, s_dim, hidden_dim, noisy, init_noise):
+    if noisy:
+        return parallel_Linear_noisy(
+            n_heads, s_dim, hidden_dim, init_noise=init_noise
+        )
+    else:
+        return parallel_Linear(
+            n_heads, s_dim, hidden_dim
+        )
+
+
 class dueling_q_Net(nn.Module):
     def __init__(
         self, 
@@ -110,32 +121,27 @@ class dueling_q_Net(nn.Module):
         self.n_actions = n_actions
         self.n_heads = n_heads
 
-        if noisy:
-            linear_layer = parallel_Linear_noisy
-        else:
-            linear_layer = parallel_Linear
-
         self.common_pipe = nn.Sequential(
-                linear_layer(n_heads, s_dim, hidden_dim, init_noise=init_noise),
+                linear_layer_(n_heads, s_dim, hidden_dim, noisy, init_noise=init_noise),
                 nn.ReLU(),
-                linear_layer(n_heads, hidden_dim, hidden_dim, init_noise=init_noise)
+                linear_layer_(n_heads, hidden_dim, hidden_dim, noisy, init_noise=init_noise)
             )
         
         if dueling_layers == 2:
             self.V_pipe = nn.Sequential(
-                linear_layer(n_heads, hidden_dim, hidden_dim_2, init_noise=init_noise),
+                linear_layer_(n_heads, hidden_dim, hidden_dim_2, noisy, init_noise=init_noise),
                 nn.ReLU(),
-                linear_layer(n_heads, hidden_dim_2, 1, init_noise=init_noise)
+                linear_layer_(n_heads, hidden_dim_2, 1, noisy, init_noise=init_noise)
             )
             self.A_pipe = nn.Sequential(
-                linear_layer(n_heads, hidden_dim, hidden_dim_2, init_noise=init_noise),
+                linear_layer_(n_heads, hidden_dim, hidden_dim_2, noisy, init_noise=init_noise),
                 nn.ReLU(),
-                linear_layer(n_heads, hidden_dim_2, n_actions, init_noise=init_noise)
+                linear_layer_(n_heads, hidden_dim_2, n_actions, noisy, init_noise=init_noise)
             )
 
         elif dueling_layers == 1:
-            self.V_pipe = linear_layer(n_heads, hidden_dim, 1, init_noise=init_noise)
-            self.A_pipe = linear_layer(n_heads, hidden_dim, n_actions, init_noise=init_noise)
+            self.V_pipe = linear_layer_(n_heads, hidden_dim, 1, noisy, init_noise=init_noise)
+            self.A_pipe = linear_layer_(n_heads, hidden_dim, n_actions, noisy, init_noise=init_noise)
             
         else:
             raise ValueError("Invalid number of dueling layers")

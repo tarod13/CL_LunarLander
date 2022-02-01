@@ -5,159 +5,15 @@ from buffers import (
     PixelExperienceSecondLevel, PixelExperienceThirdLevel
     )
 from policy_optimizers import (
-    Second_Level_SAC_PolicyOptimizer,
     Second_Level_SAC_PolicyOptimizer_v2,
     Third_Level_SAC_PolicyOptimizer
 )
 
 import wandb
+from tqdm import tqdm
 
 import cv2
 video_folder = '/home/researcher/Diego/CL_LunarLander/videos/'
-
-
-class Second_Level_Trainer:
-    def __init__(self, optimizer_kwargs={}):
-        self.optimizer = Second_Level_SAC_PolicyOptimizer(**optimizer_kwargs)
-        
-    def loop(self, env, agents, database, n_episodes=10, train=True,
-            max_episode_steps=2000, train_each=1, update_database=True, 
-            render=False, store_video=False, wandb_project=False, 
-            save_model=True, save_model_each=50, MODEL_PATH='', 
-            save_step_each=2, greedy_sampling=False, initialization=True,
-            init_buffer_size=500, n_step_td=2, eval_each=5, use_actor=True,
-            decay_epsilon=1.0):
-
-        best_return = -np.infty
-
-        if store_video:
-            video_filename = (
-                video_folder
-                + 'CARLLunarLander_'+str(agents[-1].get_id())
-                + '.mp4'
-            )
-            fourcc = cv2.VideoWriter_fourcc(*'avc1')#*'avc1'
-            video = cv2.VideoWriter(video_filename, fourcc, 50, (600, 400))
-
-        initialized = not (initialization and train)
-        returns = []
-        for episode in range(0, n_episodes):
-            state_buffer = collections.deque(maxlen=n_step_td)
-            action_buffer = collections.deque(maxlen=n_step_td)
-            reward_buffer = collections.deque(maxlen=n_step_td)
-
-            step_counter = 0
-            episode_done = False
-            state = env.reset()
-            episode_return = 0.0
-
-            state_buffer.append(state)
-
-            while not episode_done:
-                if initialized:
-                    action, dist = agents[-1].sample_action(
-                        state, explore=(not greedy_sampling), 
-                        use_actor=use_actor, eps=self.optimizer.epsilon
-                    )
-                else:
-                    action = np.random.randint(agents[-1]._n_actions)
-                    dist = np.ones(agents[-1]._n_actions) / agents[-1]._n_actions
-                if render:
-                    env.render()
-                next_state, reward, done, info = env.step(action)
-
-                action_buffer.append(action)
-                reward_buffer.append(reward)
-                dist = (dist + 1e-6) / (dist + 1e-6).sum()
-                entropy = -(dist * np.log(dist)).sum()
-                entropy_baseline = self.optimizer.H_mean
-                if entropy_baseline is None:
-                    entropy_baseline = entropy
-                entropy_difference = entropy - entropy_baseline
-                alpha = agents[-1].second_level_architecture.get_alpha()
-                gamma_n = gamma = self.optimizer.discount_factor
-                for previous_step in range(0, len(reward_buffer)-1):
-                    reward_buffer[-2-previous_step] += gamma_n * (reward + alpha * entropy_difference)
-                    gamma_n *= gamma
-
-                if store_video:
-                    img = env.render('rgb_array')
-                    video.write(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-
-                buffer_ready = len(state_buffer) == n_step_td
-                if buffer_ready and update_database:
-                    initial_state = state_buffer[0]
-                    initial_action = action_buffer[0]
-                    n_step_reward = reward_buffer[0]                    
-                    step = PixelExperienceSecondLevel(
-                        initial_state, initial_action, n_step_reward,
-                        done, next_state
-                    )
-
-                    should_save_step = (step_counter % save_step_each) == 0
-                    if should_save_step:
-                        database.append(step)
-
-                episode_return += reward
-                state = next_state.copy()
-                state_buffer.append(state)
-
-                step_counter += 1
-
-                should_train_in_this_step = train and ((step_counter % train_each) == 0) and initialized 
-                if should_train_in_this_step:
-                    metrics = self.optimizer.optimize(agents, database, n_step_td)
-                    #agents.append(agent_last)                    
-                    if wandb_project and metrics is not None:
-                        metrics['step'] = step_counter
-                        wandb.log(metrics)
-
-                if step_counter >= max_episode_steps or done:
-                    episode_done = True
-                
-                initialized = initialized or (database.__len__() > init_buffer_size)
-
-            returns.append(episode_return)
-            self.optimizer.epsilon = np.max([
-                self.optimizer.epsilon * decay_epsilon, 
-                self.optimizer.min_epsilon
-            ])
-
-            if wandb_project and train:
-                wandb.log({'episode': episode, 'return': episode_return})
-
-            if save_model and ((episode + 1) % save_model_each == 0):
-                agents[-1].save(MODEL_PATH + '/')
-            
-            if train and (episode_return > best_return):
-                best_return = episode_return
-                agents[-1].save(MODEL_PATH + '/', best=True)
-            
-            if train and ((episode+1) % eval_each == 0):
-                eval_returns = self.loop(env, agents, None, n_episodes=1, train=False, 
-                    max_episode_steps=max_episode_steps, update_database=False,
-                    render=False, store_video=True, wandb_project=wandb_project,
-                    save_model=False, greedy_sampling=greedy_sampling, initialization=False,
-                    n_step_td=1, use_actor=use_actor)
-                wandb.log(
-                    {
-                        'episode_eval': episode//eval_each, 
-                        'eval_return': eval_returns.mean(),
-                    }
-                ) 
-
-        return_array = np.array(returns)
-
-        if store_video:
-            video.release()
-            wandb.log(
-                {'video': wandb.Video(video_filename, fps=4, format='mp4')}
-            )
-
-        if render:
-            env.close()
-
-        return return_array   
 
 
 class Second_Level_Trainer_v2:
@@ -200,7 +56,8 @@ class Second_Level_Trainer_v2:
             video = cv2.VideoWriter(video_filename, fourcc, 50, (600, 400))
 
         returns = []
-        for episode in range(0, n_episodes):
+        disable_tqdm = (not train) and (n_episodes==1)
+        for episode in tqdm(range(0, n_episodes), disable=disable_tqdm):
             step_counter = 0
             episode_done = False
             episode_return = 0.0

@@ -9,7 +9,7 @@ from torch.distributions import Categorical
 
 from policy_nets import s_Net
 from actor_critic_nets import discrete_vision_actor_critic_Net
-from agent_1l_discrete import Second_Level_Agent
+from agent_2l import load_first_level_actor, Second_Level_Agent
 from agent_c_S import Conceptual_Agent
 from net_utils import freeze
 from utils import numpy2torch as np2torch
@@ -23,22 +23,21 @@ def load_conceptual_agent(inner_state_dim, vision_latent_dim, n_concepts, noisy,
         conceptual_agent.load(load_directory_path, model_id)
     return conceptual_agent
 
-def create_third_level_agent(
-    load_path_c, model_c_id, n_concepts=20, n_actions=3, first_level_s_dim=31, 
-    latent_dim=64, n_heads=2, init_log_alpha=0.0, noop_action=True, device='cuda', 
-    noisy=False, parallel=True, lr=1e-4, lr_alpha=1e-4, lr_actor=1e-4,
-    min_entropy_factor=0.1, lr_c=1e-4, lr_Alpha=1e-4, entropy_update_rate=0.05, 
-    target_update_rate=5e-3, init_Epsilon=1.0, delta_Epsilon=7.5e-4, init_log_Alpha=1.0, 
-    n_quant=11, quant_lambda=0.1, quant_gamma=1e-3, quant_method=None):
+def create_third_level_agent(load_path_c, model_c_id, n_concepts=20, n_actions=3, first_level_s_dim=31, latent_dim=64,
+    n_heads=2, init_log_alpha=0.0, noop_action=True, device='cuda', noisy=False, parallel=True, lr=1e-4, lr_alpha=1e-4, lr_actor=1e-4,
+    min_entropy_factor=0.1, lr_c=1e-4, lr_Alpha=1e-4, entropy_update_rate=0.05, target_update_rate=5e-3, init_Epsilon=1.0, 
+    delta_Epsilon=7.5e-4, init_log_Alpha=1.0, temporal_ratio=5, n_quant=11, quant_lambda=0.1, quant_gamma=1e-3, quant_method=None):
 
+    first_level_actor = load_first_level_actor(second_level_a_dim=n_actions)
+    
     second_level_architecture = discrete_vision_actor_critic_Net(first_level_s_dim, n_actions+int(noop_action),
                                                     latent_dim, n_heads, init_log_alpha, parallel, lr, lr_alpha, lr_actor)
 
     conceptual_architecture = load_conceptual_agent(0, latent_dim, n_concepts, noisy, load_path_c, model_c_id)
 
     third_level_agent = Third_Level_Agent(n_concepts, n_actions, conceptual_architecture, second_level_architecture, 
-        noop_action, min_entropy_factor, lr, lr_Alpha, entropy_update_rate, target_update_rate, init_Epsilon,
-        delta_Epsilon, init_log_Alpha, n_quant, quant_lambda, quant_gamma, quant_method).to(device)
+        first_level_actor, noop_action, min_entropy_factor, lr, lr_Alpha, entropy_update_rate, target_update_rate, init_Epsilon,
+        delta_Epsilon, init_log_Alpha, temporal_ratio, n_quant, quant_lambda, quant_gamma, quant_method).to(device)
     if hasattr(third_level_agent, 'quantile_estimator'):
         third_level_agent.quantile_estimator.q = third_level_agent.quantile_estimator.q.to(device)
     else:
@@ -51,13 +50,13 @@ def create_third_level_agent(
 
 class Third_Level_Agent(Second_Level_Agent):
     def __init__(self, n_concepts: int, n_actions: int, concept_architecture: Conceptual_Agent, 
-        second_level_architecture: discrete_vision_actor_critic_Net, noop_action:bool, 
+        second_level_architecture: discrete_vision_actor_critic_Net, first_level_actor, noop_action:bool, 
         min_entropy_factor: float=0.1, lr: float=1e-4, lr_Alpha: float=1e-4, entropy_update_rate: float=0.05, 
         target_update_rate: float=5e-3, init_Epsilon: float=1.0, delta_Epsilon: float=7.5e-4, 
-        init_log_Alpha: float=1.0, n_quant: int=11, quant_lambda: float=0.1,
+        init_log_Alpha: float=1.0, temporal_ratio: int=5, n_quant: int=11, quant_lambda: float=0.1,
         quant_gamma: float=0.001, quant_method: str=None):
 
-        super().__init__(n_actions, second_level_architecture, noop_action)    
+        super().__init__(n_actions, second_level_architecture, first_level_actor, noop_action, temporal_ratio)    
         
         self.concept_architecture = concept_architecture
         freeze(self.concept_architecture)
